@@ -499,41 +499,36 @@ body {
   });
 
   // --- Gestures ---
-  const TAP_THRESHOLD = 12;
+  const TAP_DISTANCE = 10;
   const SWIPE_THRESHOLD_RATIO = 0.25;
 
   let pointerDown = false;
   let startX = 0;
   let startY = 0;
   let currentX = 0;
+  let currentY = 0;
   let isSwiping = false;
   let containerWidth = 0;
-
-  function getPointerX(e) {
-    return e.touches ? e.touches[0].clientX : e.clientX;
-  }
-  function getPointerY(e) {
-    return e.touches ? e.touches[0].clientY : e.clientY;
-  }
 
   function onPointerDown(e) {
     if (deck.length === 0) return;
     pointerDown = true;
     isSwiping = false;
-    startX = getPointerX(e);
-    startY = getPointerY(e);
+    startX = e.clientX;
+    startY = e.clientY;
     currentX = startX;
+    currentY = startY;
     containerWidth = cardContainer.offsetWidth;
     cardWrapper.style.transition = 'none';
   }
 
   function onPointerMove(e) {
     if (!pointerDown) return;
-    currentX = e.touches ? e.touches[0].clientX : e.clientX;
+    currentX = e.clientX;
+    currentY = e.clientY;
     const dx = currentX - startX;
-    const dy = (e.touches ? e.touches[0].clientY : e.clientY) - startY;
 
-    if (!isSwiping && Math.abs(dx) > TAP_THRESHOLD) {
+    if (!isSwiping && Math.abs(dx) >= TAP_DISTANCE) {
       isSwiping = true;
     }
 
@@ -551,10 +546,14 @@ body {
     if (!pointerDown) return;
     pointerDown = false;
 
-    const dx = currentX - startX;
+    const endX = e.clientX;
+    const endY = e.clientY;
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
 
-    if (!isSwiping) {
-      // Tap → flip
+    if (distance < TAP_DISTANCE) {
+      // Tap → flip immediately
       isFlipped = !isFlipped;
       card.classList.toggle('flipped', isFlipped);
       return;
@@ -603,18 +602,17 @@ body {
     }
   }
 
-  // Touch events
-  cardContainer.addEventListener('touchstart', onPointerDown, { passive: true });
-  cardContainer.addEventListener('touchmove', onPointerMove, { passive: false });
-  cardContainer.addEventListener('touchend', onPointerUp);
-  cardContainer.addEventListener('touchcancel', onPointerUp);
+  // Pointer events (unified touch + mouse)
+  cardContainer.addEventListener('pointerdown', e => {
+    onPointerDown(e);
+    cardContainer.setPointerCapture(e.pointerId);
+  });
+  cardContainer.addEventListener('pointermove', onPointerMove);
+  cardContainer.addEventListener('pointerup', onPointerUp);
+  cardContainer.addEventListener('pointercancel', onPointerUp);
 
-  // Mouse events
-  cardContainer.addEventListener('mousedown', onPointerDown);
-  window.addEventListener('mousemove', onPointerMove);
-  window.addEventListener('mouseup', onPointerUp);
-
-  // Prevent default scroll/overscroll
+  // Prevent scroll/overscroll during swipe
+  cardContainer.style.touchAction = 'none';
   document.addEventListener('touchmove', e => {
     if (isSwiping) e.preventDefault();
   }, { passive: false });
