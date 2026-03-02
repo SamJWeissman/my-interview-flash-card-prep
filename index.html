@@ -21,6 +21,7 @@
   --text-muted: #94a3b8;
   --accent: #38bdf8;
   --danger: #f87171;
+  --success: #34d399;
   --radius: 16px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -251,12 +252,138 @@ body {
   background: rgba(56,189,248,0.15);
   color: var(--accent);
 }
+
+/* Add card button */
+.btn-add {
+  background: rgba(52,211,153,0.15);
+  color: var(--success);
+  font-size: 18px;
+  padding: 6px 12px;
+  line-height: 1;
+}
+
+/* Edit button on card back */
+.card-edit-btn {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  background: var(--accent);
+  color: #0f172a;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  -webkit-user-select: none;
+  user-select: none;
+  z-index: 2;
+}
+.card-edit-btn:active { opacity: 0.7; }
+
+/* Cancel X button (top-right of card) */
+.card-cancel-x {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 6px 10px;
+  line-height: 1;
+  z-index: 3;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.card-cancel-x:active { color: var(--danger); }
+
+/* Textarea for editing / adding */
+.card-textarea {
+  width: 100%;
+  flex: 1;
+  min-height: 80px;
+  max-height: 100%;
+  border: 2px solid var(--accent);
+  border-radius: 10px;
+  padding: 14px;
+  font-family: inherit;
+  font-size: 18px;
+  line-height: 1.5;
+  color: #1e293b;
+  background: #fff;
+  resize: none;
+  outline: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.card-textarea:focus {
+  border-color: #0ea5e9;
+  box-shadow: 0 0 0 3px rgba(14,165,233,0.2);
+}
+
+/* Card action buttons row */
+.card-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  width: 100%;
+  justify-content: center;
+}
+
+.card-action-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 24px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  min-height: 44px;
+}
+.card-action-btn:active { opacity: 0.7; }
+
+.card-action-btn.primary {
+  background: var(--accent);
+  color: #0f172a;
+}
+.card-action-btn.save {
+  background: var(--success);
+  color: #0f172a;
+}
+
+/* Validation message */
+.card-validation {
+  font-size: 13px;
+  color: var(--danger);
+  margin-top: 6px;
+  min-height: 18px;
+  text-align: center;
+}
+
+/* Edit/Add mode: card face layout adjustment */
+.card-face.form-mode {
+  justify-content: flex-start;
+  padding-top: 48px;
+  gap: 0;
+}
+
+/* Edit mode visual border */
+.card-face.editing-mode {
+  border: 3px solid var(--accent);
+}
 </style>
 </head>
 <body>
 
 <div class="topbar">
   <span class="deck-name" id="deck-name"></span>
+  <button class="btn btn-add hidden" id="add-btn">+</button>
   <button class="btn btn-upload" id="upload-btn">Upload CSV</button>
   <input type="file" id="file-input" accept=".csv,text/csv">
   <button class="btn btn-shuffle hidden" id="shuffle-btn">Shuffle</button>
@@ -276,13 +403,14 @@ body {
   <div class="card-container" id="card-container">
     <div class="card-wrapper" id="card-wrapper">
       <div class="card" id="card">
-        <div class="card-face card-front">
-          <span class="card-label">Question</span>
+        <div class="card-face card-front" id="card-front">
+          <span class="card-label" id="front-label">Question</span>
           <div class="card-text" id="front-text"></div>
         </div>
-        <div class="card-face card-back">
-          <span class="card-label">Answer</span>
+        <div class="card-face card-back" id="card-back">
+          <span class="card-label" id="back-label">Answer</span>
           <div class="card-text" id="back-text"></div>
+          <button class="card-edit-btn" id="edit-btn">&#9998; Edit</button>
         </div>
       </div>
     </div>
@@ -302,6 +430,9 @@ body {
   let deckName = '';
   let currentIndex = 0;
   let isFlipped = false;
+  let isEditing = false;
+  let isAdding = false;
+  let addStep = ''; // 'question' or 'answer'
 
   // --- DOM ---
   const $ = id => document.getElementById(id);
@@ -310,16 +441,27 @@ body {
   const bottom = $('bottom');
   const resetBtn = $('reset-btn');
   const shuffleBtn = $('shuffle-btn');
+  const addBtn = $('add-btn');
   const uploadBtn = $('upload-btn');
   const fileInput = $('file-input');
   const sampleBtn = $('sample-btn');
   const deckNameEl = $('deck-name');
   const cardWrapper = $('card-wrapper');
   const card = $('card');
+  const cardFront = $('card-front');
+  const cardBack = $('card-back');
+  const frontLabel = $('front-label');
+  const backLabel = $('back-label');
   const frontText = $('front-text');
   const backText = $('back-text');
+  const editBtn = $('edit-btn');
   const progress = $('progress');
   const cardContainer = $('card-container');
+
+  // --- Helper: check if in a modal mode ---
+  function isModalActive() {
+    return isEditing || isAdding;
+  }
 
   // --- CSV Parsing ---
   // RFC 4180 CSV parser — handles quoted fields with embedded newlines and commas
@@ -434,6 +576,7 @@ body {
       bottom.classList.add('hidden');
       resetBtn.classList.add('hidden');
       shuffleBtn.classList.add('hidden');
+      addBtn.classList.add('hidden');
       deckNameEl.textContent = '';
       return;
     }
@@ -443,6 +586,7 @@ body {
     bottom.classList.remove('hidden');
     resetBtn.classList.remove('hidden');
     shuffleBtn.classList.remove('hidden');
+    addBtn.classList.remove('hidden');
     deckNameEl.textContent = deckName;
 
     showCard(currentIndex);
@@ -450,12 +594,252 @@ body {
 
   function showCard(idx) {
     const c = deck[idx];
+    exitEditMode(true);
+    restoreCardFaces();
     frontText.textContent = c.q;
     backText.textContent = c.a;
+    editBtn.classList.remove('hidden');
     isFlipped = false;
     card.classList.remove('flipped');
     progress.textContent = (idx + 1) + ' / ' + deck.length;
   }
+
+  // Restore card faces to normal read mode (remove any form elements)
+  function restoreCardFaces() {
+    // Front face
+    frontLabel.textContent = 'Question';
+    frontText.classList.remove('hidden');
+    cardFront.classList.remove('form-mode', 'editing-mode');
+    removeFormElements(cardFront);
+
+    // Back face
+    backLabel.textContent = 'Answer';
+    backText.classList.remove('hidden');
+    cardBack.classList.remove('form-mode', 'editing-mode');
+    removeFormElements(cardBack);
+    editBtn.classList.remove('hidden');
+  }
+
+  function removeFormElements(face) {
+    face.querySelectorAll('.card-textarea, .card-actions, .card-cancel-x, .card-validation').forEach(el => el.remove());
+  }
+
+  // --- Edit Answer ---
+  function enterEditMode() {
+    if (isEditing || isAdding) return;
+    isEditing = true;
+
+    editBtn.classList.add('hidden');
+    backText.classList.add('hidden');
+    cardBack.classList.add('form-mode', 'editing-mode');
+
+    // Cancel X
+    const cancelX = document.createElement('button');
+    cancelX.className = 'card-cancel-x';
+    cancelX.textContent = '\u00d7';
+    cancelX.addEventListener('click', e => { e.stopPropagation(); exitEditMode(false); });
+    cardBack.appendChild(cancelX);
+
+    // Textarea
+    const ta = document.createElement('textarea');
+    ta.className = 'card-textarea';
+    ta.value = deck[currentIndex].a;
+    ta.addEventListener('pointerdown', e => e.stopPropagation());
+    ta.addEventListener('pointermove', e => e.stopPropagation());
+    ta.style.touchAction = 'auto';
+    cardBack.appendChild(ta);
+
+    // Actions
+    const actions = document.createElement('div');
+    actions.className = 'card-actions';
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'card-action-btn save';
+    saveBtn.textContent = 'Save';
+    saveBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      deck[currentIndex].a = ta.value.trim();
+      saveDeck();
+      exitEditMode(false);
+      backText.textContent = deck[currentIndex].a;
+    });
+    actions.appendChild(saveBtn);
+    cardBack.appendChild(actions);
+
+    requestAnimationFrame(() => ta.focus());
+  }
+
+  function exitEditMode(silent) {
+    if (!isEditing) return;
+    isEditing = false;
+
+    cardBack.classList.remove('form-mode', 'editing-mode');
+    removeFormElements(cardBack);
+    backText.classList.remove('hidden');
+    editBtn.classList.remove('hidden');
+  }
+
+  editBtn.addEventListener('pointerdown', e => e.stopPropagation());
+  editBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    enterEditMode();
+  });
+
+  // --- Add New Card ---
+  let addQuestion = '';
+
+  function startAddCard() {
+    if (isEditing || isAdding) return;
+    isAdding = true;
+    addStep = 'question';
+    addQuestion = '';
+
+    // Show main area even if deck was empty
+    emptyState.classList.add('hidden');
+    mainArea.classList.remove('hidden');
+    bottom.classList.remove('hidden');
+
+    // Show question input on front face
+    setupAddQuestionFace();
+
+    // Ensure card is on front (question) side
+    isFlipped = false;
+    card.classList.remove('flipped');
+    progress.textContent = 'New card';
+  }
+
+  function setupAddQuestionFace() {
+    frontText.classList.add('hidden');
+    editBtn.classList.add('hidden');
+    backText.classList.add('hidden');
+    cardFront.classList.add('form-mode');
+    frontLabel.textContent = 'New Question';
+
+    // Cancel X
+    const cancelX = document.createElement('button');
+    cancelX.className = 'card-cancel-x';
+    cancelX.textContent = '\u00d7';
+    cancelX.addEventListener('click', e => { e.stopPropagation(); cancelAddCard(); });
+    cardFront.appendChild(cancelX);
+
+    // Textarea
+    const ta = document.createElement('textarea');
+    ta.className = 'card-textarea';
+    ta.placeholder = 'Type your question\u2026';
+    ta.addEventListener('pointerdown', e => e.stopPropagation());
+    ta.addEventListener('pointermove', e => e.stopPropagation());
+    ta.style.touchAction = 'auto';
+    cardFront.appendChild(ta);
+
+    // Validation
+    const val = document.createElement('div');
+    val.className = 'card-validation';
+    cardFront.appendChild(val);
+
+    // Actions
+    const actions = document.createElement('div');
+    actions.className = 'card-actions';
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'card-action-btn primary';
+    nextBtn.textContent = 'Next \u2192';
+    nextBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const q = ta.value.trim();
+      if (!q) {
+        val.textContent = 'Question cannot be empty.';
+        return;
+      }
+      addQuestion = q;
+      goToAddAnswer();
+    });
+    actions.appendChild(nextBtn);
+    cardFront.appendChild(actions);
+
+    requestAnimationFrame(() => ta.focus());
+  }
+
+  function goToAddAnswer() {
+    addStep = 'answer';
+
+    // Clean front face form elements but keep hidden state
+    removeFormElements(cardFront);
+    cardFront.classList.remove('form-mode');
+
+    // Setup back face for answer input
+    backText.classList.add('hidden');
+    editBtn.classList.add('hidden');
+    cardBack.classList.add('form-mode');
+    backLabel.textContent = 'New Answer';
+
+    // Cancel X
+    const cancelX = document.createElement('button');
+    cancelX.className = 'card-cancel-x';
+    cancelX.textContent = '\u00d7';
+    cancelX.addEventListener('click', e => { e.stopPropagation(); cancelAddCard(); });
+    cardBack.appendChild(cancelX);
+
+    // Textarea
+    const ta = document.createElement('textarea');
+    ta.className = 'card-textarea';
+    ta.placeholder = 'Type your answer\u2026';
+    ta.addEventListener('pointerdown', e => e.stopPropagation());
+    ta.addEventListener('pointermove', e => e.stopPropagation());
+    ta.style.touchAction = 'auto';
+    cardBack.appendChild(ta);
+
+    // Validation
+    const val = document.createElement('div');
+    val.className = 'card-validation';
+    cardBack.appendChild(val);
+
+    // Actions
+    const actions = document.createElement('div');
+    actions.className = 'card-actions';
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'card-action-btn save';
+    saveBtn.textContent = 'Save';
+    saveBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const a = ta.value.trim();
+      if (!a) {
+        val.textContent = 'Answer cannot be empty.';
+        return;
+      }
+      finishAddCard(addQuestion, a);
+    });
+    actions.appendChild(saveBtn);
+    cardBack.appendChild(actions);
+
+    // Flip to back
+    isFlipped = true;
+    card.classList.add('flipped');
+
+    requestAnimationFrame(() => ta.focus());
+  }
+
+  function finishAddCard(q, a) {
+    deck.push({ q, a });
+    currentIndex = deck.length - 1;
+    isAdding = false;
+    addStep = '';
+    saveDeck();
+    render();
+  }
+
+  function cancelAddCard() {
+    isAdding = false;
+    addStep = '';
+    restoreCardFaces();
+
+    if (deck.length === 0) {
+      mainArea.classList.add('hidden');
+      bottom.classList.add('hidden');
+      emptyState.classList.remove('hidden');
+    } else {
+      showCard(currentIndex);
+    }
+  }
+
+  addBtn.addEventListener('click', startAddCard);
 
   // --- File handling ---
   uploadBtn.addEventListener('click', () => fileInput.click());
@@ -470,6 +854,8 @@ body {
         alert('No valid cards found. Make sure your CSV has question and answer columns.');
         return;
       }
+      if (isAdding) cancelAddCard();
+      if (isEditing) exitEditMode(true);
       deck = parsed;
       deckName = file.name.replace(/\.csv$/i, '');
       currentIndex = 0;
@@ -482,10 +868,15 @@ body {
   });
 
   resetBtn.addEventListener('click', () => {
-    if (confirm('Clear this deck?')) clearDeck();
+    if (confirm('Clear this deck?')) {
+      if (isAdding) cancelAddCard();
+      if (isEditing) exitEditMode(true);
+      clearDeck();
+    }
   });
 
   shuffleBtn.addEventListener('click', () => {
+    if (isAdding || isEditing) return;
     for (let i = deck.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [deck[i], deck[j]] = [deck[j], deck[i]];
@@ -530,7 +921,7 @@ body {
   let containerWidth = 0;
 
   function onPointerDown(e) {
-    if (deck.length === 0) return;
+    if (deck.length === 0 || isModalActive()) return;
     pointerDown = true;
     isSwiping = false;
     startX = e.clientX;
@@ -542,7 +933,7 @@ body {
   }
 
   function onPointerMove(e) {
-    if (!pointerDown) return;
+    if (!pointerDown || isModalActive()) return;
     currentX = e.clientX;
     currentY = e.clientY;
     const dx = currentX - startX;
@@ -562,7 +953,7 @@ body {
   }
 
   function onPointerUp(e) {
-    if (!pointerDown) return;
+    if (!pointerDown || isModalActive()) return;
     pointerDown = false;
 
     const endX = e.clientX;
@@ -624,7 +1015,7 @@ body {
   // Pointer events (unified touch + mouse)
   cardContainer.addEventListener('pointerdown', e => {
     onPointerDown(e);
-    cardContainer.setPointerCapture(e.pointerId);
+    if (!isModalActive()) cardContainer.setPointerCapture(e.pointerId);
   });
   cardContainer.addEventListener('pointermove', onPointerMove);
   cardContainer.addEventListener('pointerup', onPointerUp);
