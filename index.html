@@ -322,59 +322,78 @@ body {
   const cardContainer = $('card-container');
 
   // --- CSV Parsing ---
-  function parseCSV(text) {
-    const lines = text.split(/\r?\n/);
-    if (lines.length < 2) return [];
+  // RFC 4180 CSV parser — handles quoted fields with embedded newlines and commas
+  function parseCSVRows(text) {
+    const rows = [];
+    let i = 0;
+    const len = text.length;
 
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    while (i < len) {
+      const row = [];
+      // Parse one row (may span multiple lines if fields are quoted)
+      while (true) {
+        let field = '';
+        if (i < len && text[i] === '"') {
+          // Quoted field — may contain newlines, commas, escaped quotes
+          i++; // skip opening quote
+          while (i < len) {
+            if (text[i] === '"') {
+              if (i + 1 < len && text[i + 1] === '"') {
+                field += '"';
+                i += 2;
+              } else {
+                i++; // skip closing quote
+                break;
+              }
+            } else {
+              field += text[i];
+              i++;
+            }
+          }
+        } else {
+          // Unquoted field — read until comma or newline
+          while (i < len && text[i] !== ',' && text[i] !== '\r' && text[i] !== '\n') {
+            field += text[i];
+            i++;
+          }
+        }
+        row.push(field);
+
+        if (i < len && text[i] === ',') {
+          i++; // skip comma, continue to next field
+        } else {
+          break; // end of row
+        }
+      }
+      // Skip row terminator (\r\n or \n or \r)
+      if (i < len && text[i] === '\r') i++;
+      if (i < len && text[i] === '\n') i++;
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  function parseCSV(text) {
+    const rows = parseCSVRows(text);
+    if (rows.length < 2) return [];
+
+    const headers = rows[0].map(h => h.trim().toLowerCase());
     const qIdx = headers.indexOf('question');
     const aIdx = headers.indexOf('answer');
 
-    // If no headers found, use first two columns
     const qi = qIdx >= 0 ? qIdx : 0;
     const ai = aIdx >= 0 ? aIdx : 1;
+    const startRow = (qIdx >= 0 || aIdx >= 0) ? 1 : 0;
 
     const cards = [];
-    for (let i = (qIdx >= 0 || aIdx >= 0) ? 1 : 0; i < lines.length; i++) {
-      const row = parseCSVRow(lines[i]);
+    for (let i = startRow; i < rows.length; i++) {
+      const row = rows[i];
       if (row.length < 2) continue;
       const q = (row[qi] || '').trim();
       const a = (row[ai] || '').trim();
       if (q || a) cards.push({ q, a });
     }
     return cards;
-  }
-
-  function parseCSVRow(line) {
-    const result = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (inQuotes) {
-        if (ch === '"') {
-          if (i + 1 < line.length && line[i + 1] === '"') {
-            current += '"';
-            i++;
-          } else {
-            inQuotes = false;
-          }
-        } else {
-          current += ch;
-        }
-      } else {
-        if (ch === '"') {
-          inQuotes = true;
-        } else if (ch === ',') {
-          result.push(current);
-          current = '';
-        } else {
-          current += ch;
-        }
-      }
-    }
-    result.push(current);
-    return result;
   }
 
   // --- Storage ---
