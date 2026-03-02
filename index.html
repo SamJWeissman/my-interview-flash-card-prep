@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f172a">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<title>Flashcard Prep</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --card: #ffffff;
+  --card-back: #f0f9ff;
+  --text: #f8fafc;
+  --text-muted: #94a3b8;
+  --accent: #38bdf8;
+  --danger: #f87171;
+  --radius: 16px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+}
+
+/* Top bar */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  flex-shrink: 0;
+}
+
+.topbar .deck-name {
+  flex: 1;
+  font-size: 17px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.btn:active { opacity: 0.7; }
+
+.btn-upload {
+  background: var(--accent);
+  color: #0f172a;
+}
+
+.btn-reset {
+  background: rgba(248,113,113,0.15);
+  color: var(--danger);
+}
+
+.btn-sample {
+  background: var(--accent);
+  color: #0f172a;
+  padding: 12px 24px;
+  font-size: 16px;
+  border-radius: 12px;
+}
+
+#file-input { display: none; }
+
+/* Main area */
+.main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Card */
+.card-container {
+  width: 100%;
+  max-width: 400px;
+  aspect-ratio: 3 / 4;
+  max-height: 70vh;
+  perspective: 1200px;
+  position: relative;
+}
+
+.card-wrapper {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  will-change: transform, opacity;
+}
+
+.card {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.5s cubic-bezier(0.4, 0.0, 0.2, 1);
+  cursor: pointer;
+}
+
+.card.flipped {
+  transform: rotateY(180deg);
+}
+
+.card-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.card-front {
+  background: var(--card);
+  color: #1e293b;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+}
+
+.card-back {
+  background: var(--card-back);
+  color: #1e293b;
+  transform: rotateY(180deg);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+}
+
+.card-label {
+  position: absolute;
+  top: 16px;
+  left: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.card-text {
+  font-size: 20px;
+  line-height: 1.5;
+  text-align: center;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+/* Bottom */
+.bottom {
+  flex-shrink: 0;
+  text-align: center;
+  padding: 12px 16px 16px;
+}
+
+.progress {
+  font-size: 15px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  text-align: center;
+  padding: 32px;
+  flex: 1;
+}
+
+.empty-state .icon {
+  font-size: 64px;
+  line-height: 1;
+}
+
+.empty-state h2 {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.empty-state p {
+  font-size: 15px;
+  color: var(--text-muted);
+  max-width: 280px;
+  line-height: 1.5;
+}
+
+.hidden { display: none !important; }
+
+/* Swipe hint arrows */
+.swipe-hint {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 24px;
+  color: var(--text-muted);
+  opacity: 0.3;
+  pointer-events: none;
+}
+.swipe-hint.left { left: 4px; }
+.swipe-hint.right { right: 4px; }
+
+/* Shuffle button */
+.btn-shuffle {
+  background: rgba(56,189,248,0.15);
+  color: var(--accent);
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="deck-name" id="deck-name"></span>
+  <button class="btn btn-upload" id="upload-btn">Upload CSV</button>
+  <input type="file" id="file-input" accept=".csv,text/csv">
+  <button class="btn btn-shuffle hidden" id="shuffle-btn">Shuffle</button>
+  <button class="btn btn-reset hidden" id="reset-btn">Reset</button>
+</div>
+
+<div class="empty-state" id="empty-state">
+  <div class="icon">📇</div>
+  <h2>Flashcard Prep</h2>
+  <p>Upload a CSV file with <strong>question</strong> and <strong>answer</strong> columns to get started.</p>
+  <button class="btn btn-sample" id="sample-btn">Load Sample Deck</button>
+</div>
+
+<div class="main hidden" id="main-area">
+  <span class="swipe-hint left">‹</span>
+  <span class="swipe-hint right">›</span>
+  <div class="card-container" id="card-container">
+    <div class="card-wrapper" id="card-wrapper">
+      <div class="card" id="card">
+        <div class="card-face card-front">
+          <span class="card-label">Question</span>
+          <div class="card-text" id="front-text"></div>
+        </div>
+        <div class="card-face card-back">
+          <span class="card-label">Answer</span>
+          <div class="card-text" id="back-text"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="bottom hidden" id="bottom">
+  <div class="progress" id="progress"></div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // --- State ---
+  let deck = [];
+  let deckName = '';
+  let currentIndex = 0;
+  let isFlipped = false;
+
+  // --- DOM ---
+  const $ = id => document.getElementById(id);
+  const emptyState = $('empty-state');
+  const mainArea = $('main-area');
+  const bottom = $('bottom');
+  const resetBtn = $('reset-btn');
+  const shuffleBtn = $('shuffle-btn');
+  const uploadBtn = $('upload-btn');
+  const fileInput = $('file-input');
+  const sampleBtn = $('sample-btn');
+  const deckNameEl = $('deck-name');
+  const cardWrapper = $('card-wrapper');
+  const card = $('card');
+  const frontText = $('front-text');
+  const backText = $('back-text');
+  const progress = $('progress');
+  const cardContainer = $('card-container');
+
+  // --- CSV Parsing ---
+  function parseCSV(text) {
+    const lines = text.split(/\r?\n/);
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const qIdx = headers.indexOf('question');
+    const aIdx = headers.indexOf('answer');
+
+    // If no headers found, use first two columns
+    const qi = qIdx >= 0 ? qIdx : 0;
+    const ai = aIdx >= 0 ? aIdx : 1;
+
+    const cards = [];
+    for (let i = (qIdx >= 0 || aIdx >= 0) ? 1 : 0; i < lines.length; i++) {
+      const row = parseCSVRow(lines[i]);
+      if (row.length < 2) continue;
+      const q = (row[qi] || '').trim();
+      const a = (row[ai] || '').trim();
+      if (q || a) cards.push({ q, a });
+    }
+    return cards;
+  }
+
+  function parseCSVRow(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"') {
+          if (i + 1 < line.length && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          current += ch;
+        }
+      } else {
+        if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ',') {
+          result.push(current);
+          current = '';
+        } else {
+          current += ch;
+        }
+      }
+    }
+    result.push(current);
+    return result;
+  }
+
+  // --- Storage ---
+  function saveDeck() {
+    localStorage.setItem('fc_deck', JSON.stringify(deck));
+    localStorage.setItem('fc_name', deckName);
+    localStorage.setItem('fc_index', currentIndex);
+  }
+
+  function loadDeck() {
+    const raw = localStorage.getItem('fc_deck');
+    if (raw) {
+      deck = JSON.parse(raw);
+      deckName = localStorage.getItem('fc_name') || '';
+      currentIndex = parseInt(localStorage.getItem('fc_index') || '0', 10);
+      if (currentIndex >= deck.length) currentIndex = 0;
+      return true;
+    }
+    return false;
+  }
+
+  function clearDeck() {
+    localStorage.removeItem('fc_deck');
+    localStorage.removeItem('fc_name');
+    localStorage.removeItem('fc_index');
+    deck = [];
+    deckName = '';
+    currentIndex = 0;
+    isFlipped = false;
+    render();
+  }
+
+  // --- Rendering ---
+  function render() {
+    if (deck.length === 0) {
+      emptyState.classList.remove('hidden');
+      mainArea.classList.add('hidden');
+      bottom.classList.add('hidden');
+      resetBtn.classList.add('hidden');
+      shuffleBtn.classList.add('hidden');
+      deckNameEl.textContent = '';
+      return;
+    }
+
+    emptyState.classList.add('hidden');
+    mainArea.classList.remove('hidden');
+    bottom.classList.remove('hidden');
+    resetBtn.classList.remove('hidden');
+    shuffleBtn.classList.remove('hidden');
+    deckNameEl.textContent = deckName;
+
+    showCard(currentIndex);
+  }
+
+  function showCard(idx) {
+    const c = deck[idx];
+    frontText.textContent = c.q;
+    backText.textContent = c.a;
+    isFlipped = false;
+    card.classList.remove('flipped');
+    progress.textContent = (idx + 1) + ' / ' + deck.length;
+  }
+
+  // --- File handling ---
+  uploadBtn.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const parsed = parseCSV(ev.target.result);
+      if (parsed.length === 0) {
+        alert('No valid cards found. Make sure your CSV has question and answer columns.');
+        return;
+      }
+      deck = parsed;
+      deckName = file.name.replace(/\.csv$/i, '');
+      currentIndex = 0;
+      isFlipped = false;
+      saveDeck();
+      render();
+    };
+    reader.readAsText(file);
+    fileInput.value = '';
+  });
+
+  resetBtn.addEventListener('click', () => {
+    if (confirm('Clear this deck?')) clearDeck();
+  });
+
+  shuffleBtn.addEventListener('click', () => {
+    for (let i = deck.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+    currentIndex = 0;
+    isFlipped = false;
+    saveDeck();
+    render();
+  });
+
+  // --- Sample deck ---
+  sampleBtn.addEventListener('click', () => {
+    deck = [
+      { q: 'What is the time complexity of binary search?', a: 'O(log n)' },
+      { q: 'What is a hash table?', a: 'A data structure that maps keys to values using a hash function for O(1) average lookup.' },
+      { q: 'Explain the difference between a stack and a queue.', a: 'Stack: LIFO (Last In, First Out)\nQueue: FIFO (First In, First Out)' },
+      { q: 'What is Big O notation?', a: 'A mathematical notation describing the upper bound of an algorithm\'s growth rate as input size increases.' },
+      { q: 'What is a linked list?', a: 'A linear data structure where each element (node) contains data and a pointer to the next node.' },
+      { q: 'What is memoization?', a: 'An optimization technique that caches the results of expensive function calls and returns the cached result for repeated inputs.' },
+      { q: 'What is the difference between BFS and DFS?', a: 'BFS explores level by level (uses a queue).\nDFS explores as deep as possible first (uses a stack/recursion).' },
+      { q: 'What is a binary search tree (BST)?', a: 'A binary tree where left children are smaller and right children are larger than the parent node.' },
+      { q: 'What is dynamic programming?', a: 'Solving complex problems by breaking them into overlapping subproblems and storing their solutions.' },
+      { q: 'What is the CAP theorem?', a: 'A distributed system can only guarantee two of three: Consistency, Availability, Partition tolerance.' },
+    ];
+    deckName = 'Sample – CS Interview';
+    currentIndex = 0;
+    isFlipped = false;
+    saveDeck();
+    render();
+  });
+
+  // --- Gestures ---
+  const TAP_THRESHOLD = 12;
+  const SWIPE_THRESHOLD_RATIO = 0.25;
+
+  let pointerDown = false;
+  let startX = 0;
+  let startY = 0;
+  let currentX = 0;
+  let isSwiping = false;
+  let containerWidth = 0;
+
+  function getPointerX(e) {
+    return e.touches ? e.touches[0].clientX : e.clientX;
+  }
+  function getPointerY(e) {
+    return e.touches ? e.touches[0].clientY : e.clientY;
+  }
+
+  function onPointerDown(e) {
+    if (deck.length === 0) return;
+    pointerDown = true;
+    isSwiping = false;
+    startX = getPointerX(e);
+    startY = getPointerY(e);
+    currentX = startX;
+    containerWidth = cardContainer.offsetWidth;
+    cardWrapper.style.transition = 'none';
+  }
+
+  function onPointerMove(e) {
+    if (!pointerDown) return;
+    currentX = e.touches ? e.touches[0].clientX : e.clientX;
+    const dx = currentX - startX;
+    const dy = (e.touches ? e.touches[0].clientY : e.clientY) - startY;
+
+    if (!isSwiping && Math.abs(dx) > TAP_THRESHOLD) {
+      isSwiping = true;
+    }
+
+    if (isSwiping) {
+      e.preventDefault();
+      const pct = dx / containerWidth;
+      const rotation = pct * 15;
+      const opacity = 1 - Math.abs(pct) * 0.4;
+      cardWrapper.style.transform = `translateX(${dx}px) rotate(${rotation}deg)`;
+      cardWrapper.style.opacity = Math.max(0.3, opacity);
+    }
+  }
+
+  function onPointerUp(e) {
+    if (!pointerDown) return;
+    pointerDown = false;
+
+    const dx = currentX - startX;
+
+    if (!isSwiping) {
+      // Tap → flip
+      isFlipped = !isFlipped;
+      card.classList.toggle('flipped', isFlipped);
+      return;
+    }
+
+    const pct = dx / containerWidth;
+
+    if (Math.abs(pct) > SWIPE_THRESHOLD_RATIO) {
+      // Swipe past threshold → navigate
+      const dir = dx > 0 ? 1 : -1; // 1 = right (prev), -1 = left (next)
+      const exitX = dir * containerWidth * 1.5;
+      const exitRot = dir * 30;
+
+      cardWrapper.style.transition = 'transform 0.25s ease-out, opacity 0.25s ease-out';
+      cardWrapper.style.transform = `translateX(${exitX}px) rotate(${exitRot}deg)`;
+      cardWrapper.style.opacity = '0';
+
+      setTimeout(() => {
+        // Update index
+        if (dir === -1) {
+          currentIndex = (currentIndex + 1) % deck.length;
+        } else {
+          currentIndex = (currentIndex - 1 + deck.length) % deck.length;
+        }
+        saveDeck();
+        showCard(currentIndex);
+
+        // Animate new card in from opposite side
+        cardWrapper.style.transition = 'none';
+        cardWrapper.style.transform = `translateX(${-dir * containerWidth * 0.5}px) rotate(${-dir * 10}deg)`;
+        cardWrapper.style.opacity = '0.3';
+
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            cardWrapper.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.3s ease-out';
+            cardWrapper.style.transform = 'translateX(0) rotate(0)';
+            cardWrapper.style.opacity = '1';
+          });
+        });
+      }, 250);
+    } else {
+      // Snap back
+      cardWrapper.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.3s ease-out';
+      cardWrapper.style.transform = 'translateX(0) rotate(0)';
+      cardWrapper.style.opacity = '1';
+    }
+  }
+
+  // Touch events
+  cardContainer.addEventListener('touchstart', onPointerDown, { passive: true });
+  cardContainer.addEventListener('touchmove', onPointerMove, { passive: false });
+  cardContainer.addEventListener('touchend', onPointerUp);
+  cardContainer.addEventListener('touchcancel', onPointerUp);
+
+  // Mouse events
+  cardContainer.addEventListener('mousedown', onPointerDown);
+  window.addEventListener('mousemove', onPointerMove);
+  window.addEventListener('mouseup', onPointerUp);
+
+  // Prevent default scroll/overscroll
+  document.addEventListener('touchmove', e => {
+    if (isSwiping) e.preventDefault();
+  }, { passive: false });
+
+  // --- Service Worker ---
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+
+  // --- Init ---
+  loadDeck();
+  render();
+})();
+</script>
+</body>
+</html>
